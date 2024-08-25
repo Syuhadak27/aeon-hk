@@ -1,32 +1,25 @@
-from aria2p import API as ariaAPI, Client as ariaClient
-from flask import Flask, request
-from logging import getLogger, FileHandler, StreamHandler, INFO, basicConfig
-from qbittorrentapi import NotFound404Error, Client as qbClient
 from time import sleep
-from sabnzbdapi import sabnzbdClient
-from asyncio import get_event_loop
+from logging import INFO, FileHandler, StreamHandler, getLogger, basicConfig
+
+from flask import Flask, request
+from aria2p import API as ariaAPI
+from aria2p import Client as ariaClient
+from qbittorrentapi import Client as qbClient
+from qbittorrentapi import NotFound404Error
 
 from web.nodes import make_tree
 
 app = Flask(__name__)
 
-web_loop = get_event_loop()
+aria2 = ariaAPI(ariaClient(host="http://localhost", port=6800, secret=""))
 
-qbittorrent_client = qbClient(
+xnox_client = qbClient(
     host="localhost",
     port=8090,
     VERIFY_WEBUI_CERTIFICATE=False,
     REQUESTS_ARGS={"timeout": (30, 60)},
     HTTPADAPTER_ARGS={"pool_maxsize": 200, "pool_block": True},
 )
-
-sabnzbd_client = sabnzbdClient(
-    host="http://localhost",
-    api_key="mltb",
-    port="8070",
-)
-
-aria2 = ariaAPI(ariaClient(host="http://localhost", port=6800, secret=""))
 
 basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
@@ -43,7 +36,7 @@ page = """
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Torrent File Selector</title>
-    <link rel="icon" href="https://telegra.ph/file/43af672249c94053356c7.jpg" type="image/jpg">
+    <link rel="icon" href="https://graph.org/file/1a6ad157f55bc42b548df.png" type="image/jpg">
     <script
       src="https://code.jquery.com/jquery-3.5.1.slim.min.js"
       integrity="sha256-4+XzXVhsDmqanXGHaHvgh1gMQKX40OUvDEBTu8JcmNs="
@@ -162,7 +155,7 @@ span{
 
 span.active{
     transform: rotate(90deg);
-    -ms-transform: rotate(90deg);	 /* for IE  */
+    -ms-transform: rotate(90deg); /* for IE  */
     -webkit-transform: rotate(90deg);/* for browsers supporting webkit (such as chrome, firefox, safari etc.). */
     display: inline-block;
 }
@@ -244,16 +237,16 @@ function s_validate() {
     <header>
       <div class="brand">
         <img
-          src="https://telegra.ph/file/43af672249c94053356c7.jpg"
+          src="https://graph.org/file/1a6ad157f55bc42b548df.png"
           alt="logo"
         />
-        <a href="https://t.me/anas_tayyar">
+        <a href="https://t.me/krn_adhikari">
           <h2 class="name">Bittorrent Selection</h2>
         </a>
       </div>
       <div class="social">
-        <a href="https://www.github.com/anasty17/mirror-leech-telegram-bot"><i class="fab fa-github"></i></a>
-        <a href="https://t.me/anas_tayyar"><i class="fab fa-telegram"></i></a>
+        <a href="https://www.github.com/weebzone/WZML"><i class="fab fa-github"></i></a>
+        <a href="https://t.me/krn_adhikari"><i class="fab fa-telegram"></i></a>
       </div>
     </header>
     <div id="sticks">
@@ -440,7 +433,7 @@ code_page = """
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Torrent Code Checker</title>
-    <link rel="icon" href="https://telegra.ph/file/43af672249c94053356c7.jpg" type="image/jpg">
+    <link rel="icon" href="https://graph.org/file/1a6ad157f55bc42b548df.png" type="image/jpg">
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -636,16 +629,16 @@ section span{
     <header>
       <div class="brand">
         <img
-          src="https://telegra.ph/file/43af672249c94053356c7.jpg"
+          src="https://graph.org/file/1a6ad157f55bc42b548df.png"
           alt="logo"
         />
-        <a href="https://t.me/anas_tayyar">
+        <a href="https://t.me/krn_adhikari">
           <h2 class="name">Bittorrent Selection</h2>
         </a>
       </div>
       <div class="social">
-        <a href="https://www.github.com/anasty17/mirror-leech-telegram-bot"><i class="fab fa-github"></i></a>
-        <a href="https://t.me/anas_tayyar"><i class="fab fa-telegram"></i></a>
+        <a href="https://www.github.com/weebzone/WZML"><i class="fab fa-github"></i></a>
+        <a href="https://t.me/krn_adhikari"><i class="fab fa-telegram"></i></a>
       </div>
     </header>
     <section>
@@ -679,7 +672,7 @@ def re_verfiy(paused, resumed, hash_id):
 
     k = 0
     while True:
-        res = qbittorrent_client.torrents_files(torrent_hash=hash_id)
+        res = xnox_client.torrents_files(torrent_hash=hash_id)
         verify = True
         for i in res:
             if str(i.id) in paused and i.priority != 0:
@@ -693,7 +686,7 @@ def re_verfiy(paused, resumed, hash_id):
         LOGGER.info("Reverification Failed! Correcting stuff...")
         sleep(1)
         try:
-            qbittorrent_client.torrents_file_priority(
+            xnox_client.torrents_file_priority(
                 torrent_hash=hash_id, file_ids=paused, priority=0
             )
         except NotFound404Error as e:
@@ -701,7 +694,7 @@ def re_verfiy(paused, resumed, hash_id):
         except Exception as e:
             LOGGER.error(f"{e} Errored in reverification paused!")
         try:
-            qbittorrent_client.torrents_file_priority(
+            xnox_client.torrents_file_priority(
                 torrent_hash=hash_id, file_ids=resumed, priority=1
             )
         except NotFound404Error as e:
@@ -717,7 +710,7 @@ def re_verfiy(paused, resumed, hash_id):
 
 @app.route("/app/files/<string:id_>", methods=["GET"])
 def list_torrent_contents(id_):
-    if "pin_code" not in request.args.keys():
+    if "pin_code" not in request.args:
         return code_page.replace("{form_url}", f"/app/files/{id_}")
 
     pincode = ""
@@ -729,20 +722,12 @@ def list_torrent_contents(id_):
     if request.args["pin_code"] != pincode:
         return "<h1>Incorrect pin code</h1>"
 
-    if id_.startswith("SABnzbd_nzo"):
-
-        async def get_files():
-            res = await sabnzbd_client.get_files(id_)
-            return res
-
-        res = web_loop.run_until_complete(get_files())
-        cont = make_tree(res, "nzb")
-    elif len(id_) > 20:
-        res = qbittorrent_client.torrents_files(torrent_hash=id_)
-        cont = make_tree(res, "qbit")
+    if len(id_) > 20:
+        res = xnox_client.torrents_files(torrent_hash=id_)
+        cont = make_tree(res)
     else:
         res = aria2.client.get_files(id_)
-        cont = make_tree(res, "aria")
+        cont = make_tree(res, True)
     return page.replace("{My_content}", cont[0]).replace(
         "{form_url}", f"/app/files/{id_}?pin_code={pincode}"
     )
@@ -751,24 +736,10 @@ def list_torrent_contents(id_):
 @app.route("/app/files/<string:id_>", methods=["POST"])
 def set_priority(id_):
     data = dict(request.form)
-
-    if id_.startswith("SABnzbd_nzo"):
-
-        to_remove = []
-        for i, value in data.items():
-            if "filenode" in i and value != "on":
-                node_no = i.split("_")[-1]
-                to_remove.append(node_no)
-
-        async def remove_files():
-            await sabnzbd_client.remove_file(id_, to_remove)
-
-        web_loop.run_until_complete(remove_files())
-        LOGGER.info(f"Verified! nzo_id: {id_}")
-
-    elif len(id_) > 20:
-        resume = ""
+    resume = ""
+    if len(id_) > 20:
         pause = ""
+
         for i, value in data.items():
             if "filenode" in i:
                 node_no = i.split("_")[-1]
@@ -782,7 +753,7 @@ def set_priority(id_):
         resume = resume.strip("|")
 
         try:
-            qbittorrent_client.torrents_file_priority(
+            xnox_client.torrents_file_priority(
                 torrent_hash=id_, file_ids=pause, priority=0
             )
         except NotFound404Error as e:
@@ -790,7 +761,7 @@ def set_priority(id_):
         except Exception as e:
             LOGGER.error(f"{e} Errored in paused")
         try:
-            qbittorrent_client.torrents_file_priority(
+            xnox_client.torrents_file_priority(
                 torrent_hash=id_, file_ids=resume, priority=1
             )
         except NotFound404Error as e:
@@ -801,7 +772,6 @@ def set_priority(id_):
         if not re_verfiy(pause, resume, id_):
             LOGGER.error(f"Verification Failed! Hash: {id_}")
     else:
-        resume = ""
         for i, value in data.items():
             if "filenode" in i and value == "on":
                 node_no = i.split("_")[-1]
@@ -819,13 +789,13 @@ def set_priority(id_):
 
 @app.route("/")
 def homepage():
-    return "<h1>See mirror-leech-telegram-bot <a href='https://www.github.com/anasty17/mirror-leech-telegram-bot'>@GitHub</a> By <a href='https://github.com/anasty17'>Anas</a></h1>"
+    return "<h1>See WZML-X <a href='https://www.github.com/weebzone/WZML'>@GitHub</a> By <a href='https://github.com/weebzone'>Code With Weeb</a></h1>"
 
 
 @app.errorhandler(Exception)
 def page_not_found(e):
     return (
-        f"<h1>404: Task not found! Mostly wrong input. <br><br>Error: {e}</h2>",
+        f"<h1>404: Torrent not found! Mostly wrong input. <br><br>Error: {e}</h2>",
         404,
     )
 

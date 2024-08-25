@@ -1,51 +1,53 @@
-from bot.helper.ext_utils.status_utils import (
+from bot.helper.ext_utils.bot_utils import (
     MirrorStatus,
-    get_readable_file_size,
     get_readable_time,
+    get_readable_file_size,
 )
 
 
 class TelegramStatus:
-    def __init__(self, listener, obj, gid, status):
-        self.listener = listener
-        self._obj = obj
-        self._size = self.listener.size
-        self._gid = gid
-        self._status = status
+    def __init__(self, obj, size, message, gid, status):
+        self.__obj = obj
+        self.__size = size
+        self.__gid = gid
+        self.__status = status
+        self.message = message
 
     def processed_bytes(self):
-        return get_readable_file_size(self._obj.processed_bytes)
+        return get_readable_file_size(self.__obj.processed_bytes)
 
     def size(self):
-        return get_readable_file_size(self._size)
+        return get_readable_file_size(self.__size)
 
     def status(self):
-        if self._status == "up":
+        if self.__status == "up":
+            if self.__obj.processed_bytes == 0:
+                return MirrorStatus.STATUS_PROCESSING
             return MirrorStatus.STATUS_UPLOADING
         return MirrorStatus.STATUS_DOWNLOADING
 
     def name(self):
-        return self.listener.name
+        return self.__obj.name
 
     def progress(self):
         try:
-            progress_raw = self._obj.processed_bytes / self._size * 100
-        except:
+            progress_raw = self.__obj.processed_bytes / self.__size * 100
+        except Exception:
             progress_raw = 0
         return f"{round(progress_raw, 2)}%"
 
     def speed(self):
-        return f"{get_readable_file_size(self._obj.speed)}/s"
+        return f"{get_readable_file_size(self.__obj.speed)}/s"
 
     def eta(self):
         try:
-            seconds = (self._size - self._obj.processed_bytes) / self._obj.speed
+            seconds = (self.__size - self.__obj.processed_bytes) / self.__obj.speed
             return get_readable_time(seconds)
-        except:
+        except Exception:
             return "-"
 
-    def gid(self):
-        return self._gid
+    def gid(self) -> str:
+        return self.__gid
 
-    def task(self):
-        return self._obj
+    def download(self):
+        return self.__obj

@@ -1,12 +1,6 @@
-from anytree import NodeMixin
-from os import environ
 from re import findall as re_findall
 
-DOWNLOAD_DIR = environ.get("DOWNLOAD_DIR", "")
-if len(DOWNLOAD_DIR) == 0:
-    DOWNLOAD_DIR = "/usr/src/app/downloads/"
-elif not DOWNLOAD_DIR.endswith("/"):
-    DOWNLOAD_DIR += "/"
+from anytree import NodeMixin
 
 
 class TorNode(NodeMixin):
@@ -29,7 +23,7 @@ class TorNode(NodeMixin):
         if parent is not None:
             self.parent = parent
         if size is not None:
-            self.fsize = size
+            self.size = size
         if priority is not None:
             self.priority = priority
         if file_id is not None:
@@ -43,13 +37,13 @@ def qb_get_folders(path):
 
 
 def get_folders(path):
-    fs = re_findall(f"{DOWNLOAD_DIR}[0-9]+/(.+)", path)[0]
+    fs = re_findall("/usr/src/app/downloads/[0-9]+/(.+)", path)[0]
     return fs.split("/")
 
 
-def make_tree(res, tool=False):
-    if tool == "qbit":
-        parent = TorNode("Torrent")
+def make_tree(res, aria2=False):
+    parent = TorNode("Torrent")
+    if not aria2:
         for i in res:
             folders = qb_get_folders(i.name)
             if len(folders) > 1:
@@ -84,8 +78,7 @@ def make_tree(res, tool=False):
                     file_id=i.id,
                     progress=round(i.progress * 100, 5),
                 )
-    elif tool == "aria":
-        parent = TorNode("Torrent")
+    else:
         for i in res:
             folders = get_folders(i["path"])
             priority = 1
@@ -127,58 +120,35 @@ def make_tree(res, tool=False):
                         (int(i["completedLength"]) / int(i["length"])) * 100, 5
                     ),
                 )
-
-    else:
-        parent = TorNode("Torrent")
-        priority = 1
-        for i in res["files"]:
-            TorNode(
-                i["filename"],
-                is_file=True,
-                parent=parent,
-                size=float(i["mb"]) * 1048576,
-                priority=priority,
-                file_id=i["nzf_id"],
-                progress=round(
-                    ((float(i["mb"]) - float(i["mbleft"])) / float(i["mb"])) * 100,
-                    5,
-                ),
-            )
-
     return create_list(parent, ["", 0])
-
-
-"""
-def print_tree(parent):
-    for pre, _, node in RenderTree(parent):
-        treestr = u"%s%s" % (pre, node.name)
-        print(treestr.ljust(8), node.is_folder, node.is_file)
-"""
 
 
 def create_list(par, msg):
     if par.name != ".unwanted":
         msg[0] += "<ul>"
     for i in par.children:
-        msg[0] += "<li>"
         if i.is_folder:
+            msg[0] += "<li>"
             if i.name != ".unwanted":
-                msg[
-                    0
-                ] += f'<input type="checkbox" name="foldernode_{msg[1]}"> <label for="{i.name}">{i.name}</label>'
+                msg[0] += (
+                    f'<input type="checkbox" name="foldernode_{msg[1]}"> <label for="{i.name}">{i.name}</label>'
+                )
             create_list(i, msg)
             msg[0] += "</li>"
             msg[1] += 1
         else:
+            msg[0] += "<li>"
             if i.priority == 0:
-                msg[
-                    0
-                ] += f'<input type="checkbox" name="filenode_{i.file_id}" data-size="{i.fsize}"> <label data-size="{i.fsize}" for="filenode_{i.file_id}">{i.name}</label> / {i.progress}%'
+                msg[0] += (
+                    f'<input type="checkbox" name="filenode_{i.file_id}" data-size="{i.size}"> <label data-size="{i.size}" for="filenode_{i.file_id}">{i.name}</label> / {i.progress}%'
+                )
             else:
-                msg[
-                    0
-                ] += f'<input type="checkbox" checked name="filenode_{i.file_id}" data-size="{i.fsize}"> <label data-size="{i.fsize}" for="filenode_{i.file_id}">{i.name}</label> / {i.progress}%'
-            msg[0] += f'<input type="hidden" value="off" name="filenode_{i.file_id}">'
+                msg[0] += (
+                    f'<input type="checkbox" checked name="filenode_{i.file_id}" data-size="{i.size}"> <label data-size="{i.size}" for="filenode_{i.file_id}">{i.name}</label> / {i.progress}%'
+                )
+            msg[0] += (
+                f'<input type="hidden" value="off" name="filenode_{i.file_id}">'
+            )
             msg[0] += "</li>"
 
     if par.name != ".unwanted":

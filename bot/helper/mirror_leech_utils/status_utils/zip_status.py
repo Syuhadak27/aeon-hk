@@ -1,76 +1,75 @@
 from time import time
 
-from bot import LOGGER, subprocess_lock
-from bot.helper.ext_utils.files_utils import get_path_size
-from bot.helper.ext_utils.status_utils import (
-    get_readable_file_size,
+from bot import LOGGER
+from bot.helper.ext_utils.bot_utils import (
     MirrorStatus,
+    async_to_sync,
     get_readable_time,
+    get_readable_file_size,
 )
+from bot.helper.ext_utils.files_utils import get_path_size
 
 
 class ZipStatus:
-    def __init__(self, listener, gid):
-        self.listener = listener
-        self._size = self.listener.size
-        self._gid = gid
-        self._start_time = time()
-        self._proccessed_bytes = 0
+    def __init__(self, name, size, gid, listener):
+        self.__name = name
+        self.__size = size
+        self.__gid = gid
+        self.__listener = listener
+        self.__uid = listener.uid
+        self.__start_time = time()
+        self.message = listener.message
 
     def gid(self):
-        return self._gid
+        return self.__gid
 
     def speed_raw(self):
-        return self._proccessed_bytes / (time() - self._start_time)
+        return self.processed_raw() / (time() - self.__start_time)
 
-    async def progress_raw(self):
-        await self.processed_raw()
+    def progress_raw(self):
         try:
-            return self._proccessed_bytes / self._size * 100
-        except:
+            return self.processed_raw() / self.__size * 100
+        except Exception:
             return 0
 
-    async def progress(self):
-        return f"{round(await self.progress_raw(), 2)}%"
+    def progress(self):
+        return f"{round(self.progress_raw(), 2)}%"
 
     def speed(self):
         return f"{get_readable_file_size(self.speed_raw())}/s"
 
     def name(self):
-        return self.listener.name
+        return self.__name
 
     def size(self):
-        return get_readable_file_size(self._size)
+        return get_readable_file_size(self.__size)
 
     def eta(self):
         try:
-            seconds = (self._size - self._proccessed_bytes) / self.speed_raw()
+            seconds = (self.__size - self.processed_raw()) / self.speed_raw()
             return get_readable_time(seconds)
-        except:
+        except Exception:
             return "-"
 
     def status(self):
         return MirrorStatus.STATUS_ARCHIVING
 
-    async def processed_raw(self):
-        if self.listener.newDir:
-            self._proccessed_bytes = await get_path_size(self.listener.newDir)
+    def processed_raw(self):
+        if self.__listener.newDir:
+            return async_to_sync(get_path_size, self.__listener.newDir)
         else:
-            self._proccessed_bytes = await get_path_size(self.listener.dir) - self._size
+            return async_to_sync(get_path_size, self.__listener.dir) - self.__size
 
     def processed_bytes(self):
-        return get_readable_file_size(self._proccessed_bytes)
+        return get_readable_file_size(self.processed_raw())
 
-    def task(self):
+    def download(self):
         return self
 
-    async def cancel_task(self):
-        LOGGER.info(f"Cancelling Archive: {self.listener.name}")
-        self.listener.isCancelled = True
-        async with subprocess_lock:
-            if (
-                self.listener.suproc is not None
-                and self.listener.suproc.returncode is None
-            ):
-                self.listener.suproc.kill()
-        await self.listener.onUploadError("archiving stopped by user!")
+    async def cancel_download(self):
+        LOGGER.info(f"Cancelling Archive: {self.__name}")
+        if self.__listener.suproc is not None:
+            self.__listener.suproc.kill()
+        else:
+            self.__listener.suproc = "cancelled"
+        await self.__listener.onUploadError("archiving stopped by user!")

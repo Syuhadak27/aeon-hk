@@ -1,29 +1,31 @@
 from io import BytesIO
+
 from pyrogram.filters import command
 from pyrogram.handlers import MessageHandler, EditedMessageHandler
 
-from bot import LOGGER, bot
+from bot import bot
 from bot.helper.ext_utils.bot_utils import cmd_exec, new_task
-from bot.helper.telegram_helper.bot_commands import BotCommands
 from bot.helper.telegram_helper.filters import CustomFilters
-from bot.helper.telegram_helper.message_utils import sendMessage, sendFile
+from bot.helper.telegram_helper.bot_commands import BotCommands
+from bot.helper.telegram_helper.message_utils import sendFile, sendMessage
 
 
 @new_task
 async def shell(_, message):
     cmd = message.text.split(maxsplit=1)
     if len(cmd) == 1:
-        await sendMessage(message, "No command to execute was given.")
+        await sendMessage(message, "No command to execute was provided.")
         return
     cmd = cmd[1]
     stdout, stderr, _ = await cmd_exec(cmd, shell=True)
     reply = ""
+
     if len(stdout) != 0:
-        reply += f"*Stdout*\n<code>{stdout}</code>\n"
-        LOGGER.info(f"Shell - {cmd} - {stdout}")
+        reply += f"<b>Stdout</b>\n<pre>{stdout}</pre>\n"
+
     if len(stderr) != 0:
-        reply += f"*Stderr*\n<code>{stderr}</code>"
-        LOGGER.error(f"Shell - {cmd} - {stderr}")
+        reply += f"<b>Stderr</b>\n<pre>{stderr}</pre>"
+
     if len(reply) > 3000:
         with BytesIO(str.encode(reply)) as out_file:
             out_file.name = "shell_output.txt"
@@ -36,15 +38,11 @@ async def shell(_, message):
 
 bot.add_handler(
     MessageHandler(
-        shell,
-        filters=command(BotCommands.ShellCommand, case_sensitive=True)
-        & CustomFilters.owner,
+        shell, filters=command(BotCommands.ShellCommand) & CustomFilters.sudo
     )
 )
 bot.add_handler(
     EditedMessageHandler(
-        shell,
-        filters=command(BotCommands.ShellCommand, case_sensitive=True)
-        & CustomFilters.owner,
+        shell, filters=command(BotCommands.ShellCommand) & CustomFilters.sudo
     )
 )

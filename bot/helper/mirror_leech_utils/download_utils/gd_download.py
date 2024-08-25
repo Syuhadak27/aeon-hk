@@ -1,56 +1,78 @@
-from secrets import token_urlsafe
+from secrets import token_hex
 
-from bot import task_dict, task_dict_lock, LOGGER, non_queued_dl, queue_dict_lock
+from bot import (
+    LOGGER,
+    download_dict,
+    non_queued_dl,
+    queue_dict_lock,
+    download_dict_lock,
+)
 from bot.helper.ext_utils.bot_utils import sync_to_async
-from bot.helper.ext_utils.task_manager import check_running_tasks, stop_duplicate_check
-from bot.helper.mirror_leech_utils.gdrive_utils.count import gdCount
-from bot.helper.mirror_leech_utils.gdrive_utils.download import gdDownload
-from bot.helper.mirror_leech_utils.status_utils.gdrive_status import GdriveStatus
+from bot.helper.aeon_utils.nsfw_check import isNSFW, isNSFWdata
+from bot.helper.ext_utils.task_manager import (
+    is_queued,
+    limit_checker,
+    stop_duplicate_check,
+)
+from bot.helper.telegram_helper.message_utils import sendMessage, sendStatusMessage
+from bot.helper.mirror_leech_utils.upload_utils.gdriveTools import GoogleDriveHelper
 from bot.helper.mirror_leech_utils.status_utils.queue_status import QueueStatus
-from bot.helper.telegram_helper.message_utils import sendStatusMessage
+from bot.helper.mirror_leech_utils.status_utils.gdrive_status import GdriveStatus
 
 
-async def add_gd_download(listener, path):
-    drive = gdCount()
-    name, mime_type, listener.size, _, _ = await sync_to_async(
-        drive.count, listener.link, listener.userId
-    )
+async def add_gd_download(link, path, listener, newname):
+    drive = GoogleDriveHelper()
+    name, mime_type, size, _, _ = await sync_to_async(drive.count, link)
     if mime_type is None:
         await listener.onDownloadError(name)
         return
+    id = drive.getIdFromUrl(link)
+    data = drive.getFilesByFolderId(id)
+    name = newname or name
+    gid = token_hex(4)
 
-    listener.name = listener.name or name
-    gid = token_urlsafe(12)
-
-    msg, button = await stop_duplicate_check(listener)
-    if msg:
-        await listener.onDownloadError(msg, button)
+    if isNSFW(name) or isNSFWdata(data):
+        await listener.onDownloadError("NSFW detected")
         return
 
-    add_to_queue, event = await check_running_tasks(listener)
-    if add_to_queue:
-        LOGGER.info(f"Added to Queue/Download: {listener.name}")
-        async with task_dict_lock:
-            task_dict[listener.mid] = QueueStatus(listener, gid, "dl")
+    msg, button = await stop_duplicate_check(name, listener)
+    if msg:
+        await sendMessage(listener.message, msg, button)
+        return
+    if limit_exceeded := await limit_checker(size, listener, isDriveLink=True):
+        await listener.onDownloadError(limit_exceeded)
+        return
+    added_to_queue, event = await is_queued(listener.uid)
+    if added_to_queue:
+        LOGGER.info(f"Added to Queue/Download: {name}")
+        async with download_dict_lock:
+            download_dict[listener.uid] = QueueStatus(
+                name, size, gid, listener, "dl"
+            )
         await listener.onDownloadStart()
-        if listener.multi <= 1:
-            await sendStatusMessage(listener.message)
+        await sendStatusMessage(listener.message)
         await event.wait()
-        if listener.isCancelled:
-            return
-        async with queue_dict_lock:
-            non_queued_dl.add(listener.mid)
-
-    drive = gdDownload(listener, path)
-    async with task_dict_lock:
-        task_dict[listener.mid] = GdriveStatus(listener, drive, gid, "dl")
-
-    if add_to_queue:
-        LOGGER.info(f"Start Queued Download from GDrive: {listener.name}")
+        async with download_dict_lock:
+            if listener.uid not in download_dict:
+                return
+        from_queue = True
     else:
-        LOGGER.info(f"Download from GDrive: {listener.name}")
-        await listener.onDownloadStart()
-        if listener.multi <= 1:
-            await sendStatusMessage(listener.message)
+        from_queue = False
 
-    await sync_to_async(drive.download)
+    drive = GoogleDriveHelper(name, path, listener)
+    async with download_dict_lock:
+        download_dict[listener.uid] = GdriveStatus(
+            drive, size, listener.message, gid, "dl"
+        )
+
+    async with queue_dict_lock:
+        non_queued_dl.add(listener.uid)
+
+    if from_queue:
+        LOGGER.info(f"Start Queued Download from GDrive: {name}")
+    else:
+        LOGGER.info(f"Download from GDrive: {name}")
+        await listener.onDownloadStart()
+        await sendStatusMessage(listener.message)
+
+    await sync_to_async(drive.download, link)
