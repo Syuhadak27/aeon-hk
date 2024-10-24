@@ -1,7 +1,7 @@
 
-# WZML
+# AEON
 
-Panduan untuk membuat dan men-deploy aplikasi WZML di Heroku.
+Panduan untuk membuat dan men-deploy aplikasi di Heroku.
 
 ## Create and Deploy
 
